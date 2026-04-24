@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi import Response
 from app.core import Qwen3TTSEngine
 from contextlib import asynccontextmanager
+from typing import Optional
 import io, os, uuid, soundfile as sf
 import torch
 import gc
@@ -31,15 +32,16 @@ app = FastAPI(lifespan=lifespan)
 
 
 # -------------------------
-# Voice Design
+# Voice Clone
 # 於text處輸入希望TTS模型生成的語句
 # 於language輸入生成語言
-# 於instruct填入說話者的語氣、情緒及性別等等，可以使用白話文。
-# 由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤。
+# 於ref_audio上傳需要克隆的音檔
+# 於ref_text上傳文字稿
+# 由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤
 # -------------------------
 
-@app.post("/generate/voice_design")
-async def voice_design(
+@app.post("/generate/voice_clone")
+async def voice_clone(
     text: str = Form(
         ...,
         description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
@@ -50,16 +52,21 @@ async def voice_design(
         description="【必填】想要模型生成的語言：Chinese, English...",
         examples=["Chinese"]
     ),
-    instruct: str = Form(
+    ref_audio: UploadFile = File(
         ...,
-        description="【必填】想要模型生成的語言：Chinese, English...",
-        examples=["中年女性，温雅中性的声音，音调偏高且起伏明显"]
+        description="【必填】參考音檔（樣本），15秒左右，可從Samples資料夾選取。",
+    ),
+    ref_text: Optional[str] = Form(
+        None,
+        description="【選填】上傳音檔的文字稿，可留白。",
+        example="【選填】上傳音檔的文字稿。",
     )
 ):
     wav, sr = engine.generate(
             text=text,
             language=language,
-            instruct=instruct
+            ref_audio=ref_audio,
+            ref_text=ref_text
         )
     print(f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}")
     if wav is None or len(wav) == 0:

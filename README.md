@@ -28,15 +28,16 @@
 
 ## 使用說明
 
-Qwen3-tts的優勢為語調、音色及情緒生成，可以用白話描述需要的聲音型態及場景
+Qwen3-tts的優勢情緒生成，會推測提示詞文本的語氣生成最貼近情境的語調、音色
 
-Qwen3-tts的API先實裝了Voice Design一種功能，其餘功能相較VoxCPM2沒有明顯優勢：
+Qwen3-tts的API先實裝了Voice Clone一種功能，其餘功能相較VoxCPM2沒有明顯優勢：
 
-1. Voice Design
+1.  Voice Clone
     於text處輸入希望TTS模型生成的語句
     於language輸入生成語言
-    於instruct填入說話者的語氣、情緒及性別等等，可以使用白話文。
-    由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤。
+    於ref_audio上傳需要克隆的音檔
+    於ref_text上傳音檔文字稿
+    由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤
 
 2. 其他功能
     模型支援非語言發音，如嘆氣、大笑...等等
