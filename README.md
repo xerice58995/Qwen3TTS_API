@@ -1,22 +1,21 @@
 ## 快速啟動 Qwen3-tts
 
-1. 建立環境:
+1. 使用Docker建立環境:
    ```bash
-   conda create -n qwen3-tts python=3.12 -y
-   conda activate qwen3-tts
+   docker build -t qwen3tts_api .
    ```
 
-2. 安裝Qwen3-tts
+2. 啟動 API:
     ```bash
-    pip install -U qwen-tts
-   ```
+    docker run --rm —gpus all -d -p 10006:8000 --name tts_test3 qwen3tts_api
+    ```
 
-3. 安裝依賴:
+    啟動後請訪問：http://<伺服器網址>:10006/docs 進入 Swagger UI 進行測試。
+
+3. 關閉 API:
     ```bash
-    # 建議先安裝對應顯卡的 PyTorch，例如:
-    pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128
-    # 安裝其餘依賴
-    pip install -r requirements.txt
+    docker stop tts_test3 
+    docker rm tts_test3
     ```
 
 4. 啟動 API:

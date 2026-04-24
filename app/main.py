@@ -1,17 +1,21 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import StreamingResponse, FileResponse
-from fastapi import Response
-from app.core import Qwen3TTSEngine
+import gc
+import io
+import os
+import tempfile
+import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
-import io, os, uuid, soundfile as sf
-import torch
-import gc
-import numpy as np
-import tempfile
 
+import numpy as np
+import soundfile as sf
+import torch
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+
+from app.core import Qwen3TTSEngine
 
 engine = Qwen3TTSEngine()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,7 +30,8 @@ async def lifespan(app: FastAPI):
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        torch.cuda.ipc_collect() # 進階清理：清理進程間通訊的顯存
+        torch.cuda.ipc_collect()  # 進階清理：清理進程間通訊的顯存
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -40,17 +45,20 @@ app = FastAPI(lifespan=lifespan)
 # 由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤
 # -------------------------
 
+
 @app.post("/generate/voice_clone")
 async def voice_clone(
     text: str = Form(
         ...,
         description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
-        examples=["你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"]
+        examples=[
+            "你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"
+        ],
     ),
     language: str = Form(
         ...,
         description="【必填】想要模型生成的語言：Chinese, English...",
-        examples=["Chinese"]
+        examples=["Chinese"],
     ),
     ref_audio: UploadFile = File(
         ...,
@@ -59,16 +67,15 @@ async def voice_clone(
     ref_text: Optional[str] = Form(
         None,
         description="【選填】上傳音檔的文字稿，可留白。",
-        example="【選填】上傳音檔的文字稿。",
-    )
+        examples=["【選填】上傳音檔的文字稿。"],
+    ),
 ):
     wav, sr = engine.generate(
-            text=text,
-            language=language,
-            ref_audio=ref_audio,
-            ref_text=ref_text
-        )
-    print(f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}")
+        text=text, language=language, ref_audio=ref_audio, ref_text=ref_text
+    )
+    print(
+        f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}"
+    )
     if wav is None or len(wav) == 0:
         raise HTTPException(status_code=500, detail="模型未生成任何音訊數據")
     return wav_to_stream(wav, sr)
@@ -81,9 +88,14 @@ async def save_temp_file(upload_file: UploadFile):
         buffer.write(await upload_file.read())
     return tmp_path
 
+
 def wav_to_stream(wav, sr):
     # 如果 wav 是 [[...]] 這種格式，我們需要取出裡面的內容
-    while isinstance(wav, list) and len(wav) == 1 and (isinstance(wav[0], list) or hasattr(wav[0], 'shape')):
+    while (
+        isinstance(wav, list)
+        and len(wav) == 1
+        and (isinstance(wav[0], list) or hasattr(wav[0], "shape"))
+    ):
         print("DEBUG: 偵測到嵌套結構，正在拆解...")
         wav = wav[0]
 
@@ -91,7 +103,7 @@ def wav_to_stream(wav, sr):
     if isinstance(wav, list):
         # 如果是 list，先轉成 numpy
         wav = np.array(wav)
-    elif hasattr(wav, 'cpu'):
+    elif hasattr(wav, "cpu"):
         # 如果是 torch tensor，轉到 cpu 並轉成 numpy
         wav = wav.cpu().numpy()
 
@@ -106,10 +118,8 @@ def wav_to_stream(wav, sr):
     # 存成實體暫存檔 (Swagger UI 顯示 Bug )
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
 
-    sf.write(temp_file.name, wav, sr if sr else 24000, format='WAV', subtype='PCM_16')
+    sf.write(temp_file.name, wav, sr if sr else 24000, format="WAV", subtype="PCM_16")
 
     return FileResponse(
-        path=temp_file.name,
-        media_type="audio/wav",
-        filename="qwen3_gen.wav"
+        path=temp_file.name, media_type="audio/wav", filename="qwen3_gen.wav"
     )
