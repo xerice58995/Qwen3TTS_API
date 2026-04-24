@@ -5,7 +5,6 @@ import torch
 
 class Qwen3TTSEngine:
     def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
 
     def load_model(self):
@@ -15,8 +14,7 @@ class Qwen3TTSEngine:
         dtype=torch.bfloat16,
         attn_implementation="flash_attention_2",
         )
-        self.model.to(self.device)
-        print(f"模型已成功載入至設備: {self.device}")
+        print(f"模型已成功載入至設備")
 
     def generate(self, **kwargs):
         if self.model is None:

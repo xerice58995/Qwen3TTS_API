@@ -1,10 +1,13 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi import Response
 from app.core import Qwen3TTSEngine
 from contextlib import asynccontextmanager
 import io, os, uuid, soundfile as sf
 import torch
 import gc
+import numpy as np
+import tempfile
 
 
 engine = Qwen3TTSEngine()
@@ -40,16 +43,17 @@ async def voice_design(
     text: str = Form(
         ...,
         description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
-        example="你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"
+        examples=["你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"]
     ),
     language: str = Form(
-        ....,
+        ...,
         description="【必填】想要模型生成的語言：Chinese, English...",
-    )
-    instruct: str = From(
-        ....,
+        examples=["Chinese"]
+    ),
+    instruct: str = Form(
+        ...,
         description="【必填】想要模型生成的語言：Chinese, English...",
-        example="中年女性，温雅中性的声音，音调偏高且起伏明显"
+        examples=["中年女性，温雅中性的声音，音调偏高且起伏明显"]
     )
 ):
     wav, sr = engine.generate(
@@ -57,6 +61,9 @@ async def voice_design(
             language=language,
             instruct=instruct
         )
+    print(f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}")
+    if wav is None or len(wav) == 0:
+        raise HTTPException(status_code=500, detail="模型未生成任何音訊數據")
     return wav_to_stream(wav, sr)
 
 
@@ -68,7 +75,34 @@ async def save_temp_file(upload_file: UploadFile):
     return tmp_path
 
 def wav_to_stream(wav, sr):
-    buffer = io.BytesIO()
-    sf.write(buffer, wav, sr, format='WAV')
-    buffer.seek(0)
-    return StreamingResponse(buffer, media_type="audio/wav")
+    # 如果 wav 是 [[...]] 這種格式，我們需要取出裡面的內容
+    while isinstance(wav, list) and len(wav) == 1 and (isinstance(wav[0], list) or hasattr(wav[0], 'shape')):
+        print("DEBUG: 偵測到嵌套結構，正在拆解...")
+        wav = wav[0]
+
+    # 1. 處理不同類型的輸入
+    if isinstance(wav, list):
+        # 如果是 list，先轉成 numpy
+        wav = np.array(wav)
+    elif hasattr(wav, 'cpu'):
+        # 如果是 torch tensor，轉到 cpu 並轉成 numpy
+        wav = wav.cpu().numpy()
+
+    wav = wav.astype(np.float32).flatten()
+
+    print(f"DEBUG: 最終音訊採樣數: {len(wav)}")
+
+    # 數據正規化與防爆音
+    if np.abs(wav).max() > 0:
+        wav = wav / np.abs(wav).max()
+
+    # 存成實體暫存檔 (Swagger UI 顯示 Bug )
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+
+    sf.write(temp_file.name, wav, sr if sr else 24000, format='WAV', subtype='PCM_16')
+
+    return FileResponse(
+        path=temp_file.name,
+        media_type="audio/wav",
+        filename="qwen3_gen.wav"
+    )
